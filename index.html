@@ -1,0 +1,831 @@
+<title>Aleksej Kalendar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=Figtree:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: white sheet. Phone: day logger → year grid → recap. Desktop: sticky logger on the left, year grid + recap on the right. */
+:root {
+  --bg: #ffffff;
+  --ink: #1c1a21;
+  --muted: #6c6877;
+  --line: #e8e6ee;
+  --soft: #f6f5f9;
+  --empty: #eeedf2;
+  --lv1: #d6d3df;
+  --lv2: #a7a2b6;
+  --lv3: #6c6681;
+  --lv4: #2e2a3b;
+  --focus: #2563eb;
+  --ok: #16a34a;
+  --warn: #d97706;
+  --bad: #dc2626;
+  --display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --body: "Figtree", -apple-system, "Segoe UI", system-ui, sans-serif;
+  --cell: 11px;
+  --gap: 3px;
+  color-scheme: light;
+}
+@media (min-width: 600px) { :root { --cell: 12px; } }
+@media (min-width: 1100px) { :root { --cell: 13px; } }
+
+* { box-sizing: border-box; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--body);
+  font-size: 15px;
+  line-height: 1.45;
+  padding-inline: 16px;
+  padding-block: 20px 56px;
+  -webkit-font-smoothing: antialiased;
+  font-variant-numeric: tabular-nums;
+}
+button { font: inherit; color: inherit; cursor: pointer; }
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+h1, h2, h3 { font-family: var(--display); margin: 0; text-wrap: balance; letter-spacing: -0.01em; }
+p { margin: 0; }
+
+.page {
+  max-width: 1140px;
+  margin: 0 auto;
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(0, 1fr);
+}
+.view { display: grid; gap: 18px; min-width: 0; }
+#view-today { width: 100%; max-width: 620px; margin-inline: auto; }
+
+/* Page switcher */
+.tabs { display: inline-flex; gap: 4px; border: 1px solid var(--line); border-radius: 12px; padding: 4px; background: var(--soft); }
+.tabs a { text-decoration: none; color: var(--muted); font-weight: 600; font-size: 14px; padding: 7px 16px; border-radius: 9px; }
+.tabs a:hover { color: var(--ink); }
+.tabs a[aria-current="page"] { background: var(--bg); color: var(--ink); box-shadow: 0 1px 2px rgba(28, 26, 33, 0.12); }
+.head-right { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+
+/* Header */
+.head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 10px 20px; padding-bottom: 4px; }
+.head h1 { font-size: clamp(28px, 6vw, 40px); line-height: 1.05; font-weight: 700; }
+.head p { color: var(--muted); margin-top: 6px; max-width: 46ch; }
+.sync { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 5px 12px 5px 10px; white-space: nowrap; }
+.sync i { width: 8px; height: 8px; border-radius: 50%; background: var(--lv2); }
+.sync[data-state="synced"] i { background: var(--ok); }
+.sync[data-state="connecting"] i { background: var(--warn); }
+.sync[data-state="error"] i { background: var(--bad); }
+
+.panel { border: 1px solid var(--line); border-radius: 12px; padding: 18px; background: var(--bg); min-width: 0; }
+.eyebrow { font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.icon-btn { width: 38px; height: 38px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); display: grid; place-items: center; flex: none; }
+.icon-btn:hover:not(:disabled) { background: var(--soft); }
+.icon-btn:disabled { opacity: 0.35; cursor: default; }
+.icon-btn svg { width: 16px; height: 16px; }
+.link-btn { background: none; border: 0; padding: 4px 0; color: var(--muted); font-size: 13px; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--lv1); }
+.link-btn:hover { color: var(--ink); }
+
+/* Day logger */
+.log { box-shadow: 0 1px 2px rgba(28, 26, 33, 0.04), 0 8px 24px rgba(28, 26, 33, 0.06); display: grid; gap: 14px; }
+.day-nav { display: flex; align-items: center; gap: 10px; }
+.day-label { flex: 1; min-width: 0; text-align: center; }
+.day-label h2 { font-size: clamp(22px, 5vw, 28px); font-weight: 700; line-height: 1.15; }
+.progress { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 14px; }
+.progress strong { font-weight: 700; }
+.segbar { display: flex; gap: 3px; height: 8px; }
+.segbar span { flex: 1; border-radius: 3px; background: var(--empty); transition: background-color 0.2s; }
+.groups { display: grid; gap: 14px; }
+.group { display: grid; gap: 8px; }
+.acts { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.act {
+  display: flex; align-items: center; gap: 10px; text-align: left;
+  padding: 11px 12px; border-radius: 10px;
+  border: 1.5px solid var(--line); background: var(--bg);
+  transition: background-color 0.15s, border-color 0.15s, transform 0.1s;
+  min-height: 54px;
+}
+.act:hover { border-color: color-mix(in srgb, var(--c) 45%, var(--line)); }
+.act:active { transform: scale(0.98); }
+.act .tick { width: 22px; height: 22px; border-radius: 6px; border: 2px solid var(--c); flex: none; display: grid; place-items: center; background: var(--bg); }
+.act .tick svg { width: 14px; height: 14px; opacity: 0; color: #fff; }
+.act .name { font-weight: 600; font-size: 14.5px; line-height: 1.2; min-width: 0; }
+.act[aria-pressed="true"] { background: color-mix(in srgb, var(--c) 11%, #fff); border-color: var(--c); }
+.act[aria-pressed="true"] .tick { background: var(--c); }
+.act[aria-pressed="true"] .tick svg { opacity: 1; }
+.act:disabled { opacity: 0.45; cursor: not-allowed; }
+.future-note { font-size: 13px; color: var(--muted); }
+
+.manage { border-top: 1px solid var(--line); padding-top: 14px; display: grid; gap: 12px; }
+.manage-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.manage-list li { display: flex; align-items: center; gap: 10px; font-size: 14px; min-height: 32px; }
+.manage-list .dot { width: 12px; height: 12px; border-radius: 4px; background: var(--c); flex: none; }
+.manage-list .nm { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.mini-btn { border: 1px solid var(--line); background: var(--bg); border-radius: 8px; padding: 4px 10px; font-size: 13px; font-weight: 600; }
+.mini-btn:hover { background: var(--soft); }
+.mini-btn.danger { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 35%, var(--line)); }
+.add-form { display: grid; gap: 10px; }
+.add-form label { font-size: 13px; font-weight: 600; color: var(--muted); }
+.field-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.field-row input, .field-row select { flex: 1 1 140px; min-width: 0; border: 1px solid var(--line); border-radius: 8px; padding: 9px 10px; font: inherit; font-size: 14px; background: var(--bg); color: var(--ink); }
+.swatches { display: flex; flex-wrap: wrap; gap: 6px; }
+.swatch { width: 26px; height: 26px; border-radius: 7px; background: var(--c); border: 2px solid var(--bg); box-shadow: 0 0 0 1px var(--line); padding: 0; }
+.swatch[aria-checked="true"] { box-shadow: 0 0 0 2px var(--ink); }
+.primary { background: var(--ink); color: #fff; border: 0; border-radius: 8px; padding: 9px 16px; font-weight: 600; font-size: 14px; justify-self: start; }
+.primary:disabled { opacity: 0.4; cursor: default; }
+
+/* Year grid */
+.grid-panel { display: grid; gap: 14px; }
+.grid-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 8px 16px; }
+.grid-head h2 { font-size: 19px; font-weight: 600; font-family: var(--body); letter-spacing: 0; }
+.pills { display: flex; flex-wrap: wrap; gap: 6px; }
+.pill {
+  border: 1px solid var(--line); background: var(--bg); border-radius: 999px;
+  padding: 5px 12px; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; gap: 7px; color: var(--muted);
+}
+.pill:hover { color: var(--ink); background: var(--soft); }
+.pill[aria-selected="true"] { color: var(--ink); border-color: var(--ink); background: var(--bg); }
+.pill .dot { width: 9px; height: 9px; border-radius: 3px; background: var(--c, var(--lv4)); }
+.range-pill[aria-selected="true"] { background: var(--ink); color: #fff; }
+
+.heat-scroll { overflow-x: auto; padding-bottom: 4px; -webkit-overflow-scrolling: touch; scrollbar-width: thin; scrollbar-color: var(--lv1) transparent; }
+.heat-scroll::-webkit-scrollbar { height: 8px; }
+.heat-scroll::-webkit-scrollbar-track { background: transparent; }
+.heat-scroll::-webkit-scrollbar-thumb { background: var(--lv1); border-radius: 4px; }
+.heat {
+  display: grid;
+  grid-template-columns: 30px repeat(var(--cols), var(--cell));
+  grid-template-rows: 16px repeat(7, var(--cell));
+  gap: var(--gap);
+  width: max-content;
+  font-size: 12px; color: var(--muted);
+}
+.heat .mlabel { grid-row: 1; white-space: nowrap; line-height: 16px; }
+.heat .dlabel { grid-column: 1; line-height: var(--cell); font-size: 11px; }
+.heat .c { border-radius: 3px; background: var(--empty); cursor: pointer; outline-offset: 1px; }
+.heat .c.out { visibility: hidden; }
+.heat .c.future { background: transparent; box-shadow: inset 0 0 0 1px var(--soft); cursor: default; }
+.heat .c.sel { outline: 2px solid var(--ink); }
+.heat .c:hover:not(.future) { outline: 1.5px solid var(--lv3); }
+.heat .c.sel:hover { outline: 2px solid var(--ink); }
+.l1 { background: var(--lv1) !important; } .l2 { background: var(--lv2) !important; } .l3 { background: var(--lv3) !important; } .l4 { background: var(--lv4) !important; }
+.heat-foot { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 16px; font-size: 13px; color: var(--muted); }
+.legend { display: inline-flex; align-items: center; gap: 4px; }
+.legend i { width: 11px; height: 11px; border-radius: 3px; background: var(--empty); display: inline-block; }
+.legend span { margin-inline: 4px; }
+
+/* Recap */
+.sum { display: grid; gap: 16px; }
+.sum-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; }
+.sum-head h2 { font-size: 22px; font-weight: 700; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; padding: 3px; background: var(--soft); }
+.seg button { border: 0; background: none; padding: 6px 14px; border-radius: 7px; font-size: 13px; font-weight: 600; color: var(--muted); }
+.seg button[aria-selected="true"] { background: var(--bg); color: var(--ink); box-shadow: 0 1px 2px rgba(28, 26, 33, 0.12); }
+.period-nav { display: flex; align-items: center; gap: 10px; }
+.period-nav .lbl { flex: 1; text-align: center; font-weight: 600; font-size: 16px; }
+.stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 0; border-block: 1px solid var(--line); }
+.stats div { padding: 12px 4px; text-align: center; }
+.stats div + div { border-left: 1px solid var(--line); }
+.stats dt { font-size: 12px; color: var(--muted); font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
+.stats dd { margin: 2px 0 0; font-family: var(--display); font-size: 26px; font-weight: 700; line-height: 1.1; }
+.stats dd small { font-family: var(--body); font-size: 13px; color: var(--muted); font-weight: 500; }
+.rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
+.row {
+  display: grid; align-items: center; column-gap: 12px; row-gap: 6px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: "name count" "viz viz";
+}
+@media (min-width: 640px) {
+  .row { grid-template-columns: 170px minmax(0, 1fr) 96px; grid-template-areas: "name viz count"; }
+}
+.row .nm { grid-area: name; display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 14px; min-width: 0; }
+.row .nm i { width: 10px; height: 10px; border-radius: 3px; background: var(--c); flex: none; }
+.row .nm span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row .ct { grid-area: count; text-align: right; font-size: 14px; font-weight: 600; white-space: nowrap; }
+.row .ct small { display: block; font-size: 12px; color: var(--muted); font-weight: 500; }
+.row .viz { grid-area: viz; min-width: 0; }
+.strip { display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: 3px; }
+.strip.week { max-width: 260px; }
+.strip i { aspect-ratio: 1; max-height: 28px; border-radius: 3px; background: var(--empty); }
+.strip.month i { border-radius: 2px; }
+.strip i.on { background: var(--c); }
+.strip i.future { background: transparent; box-shadow: inset 0 0 0 1px var(--soft); }
+.bar { height: 10px; border-radius: 5px; background: var(--empty); overflow: hidden; }
+.bar span { display: block; height: 100%; background: var(--c); border-radius: 5px; }
+.empty-note { color: var(--muted); font-size: 14px; }
+
+.foot { grid-column: 1 / -1; color: var(--muted); font-size: 13px; text-align: center; padding-top: 8px; }
+
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; scroll-behavior: auto !important; } }
+</style>
+
+<div class="page">
+  <header class="head">
+    <div>
+      <h1>Aleksej Kalendar</h1>
+      <p id="tagline">Tap what you did today and it locks into your year.</p>
+    </div>
+    <div class="head-right">
+      <nav class="tabs" aria-label="Pages">
+        <a href="#today" id="tab-today" aria-current="page">Today</a>
+        <a href="#progress" id="tab-progress">Progress</a>
+      </nav>
+      <span class="sync" id="sync" data-state="local"><i></i><span id="sync-text">Saved on this device</span></span>
+    </div>
+  </header>
+
+  <main class="view" id="view-today">
+
+  <section class="log panel" aria-labelledby="day-title">
+    <div class="day-nav">
+      <button class="icon-btn" id="prev-day" aria-label="Previous day"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3 5 8l5 5"/></svg></button>
+      <div class="day-label">
+        <p class="eyebrow" id="day-rel">Today</p>
+        <h2 id="day-title">—</h2>
+      </div>
+      <button class="icon-btn" id="next-day" aria-label="Next day"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 3 5 5-5 5"/></svg></button>
+    </div>
+    <div class="progress">
+      <span id="prog-text">0 of 7 locked in</span>
+      <button class="link-btn" id="today-btn" hidden>Back to today</button>
+    </div>
+    <div class="segbar" id="segbar" aria-hidden="true"></div>
+    <div class="groups" id="groups"></div>
+    <button class="link-btn" id="manage-toggle" aria-expanded="false" aria-controls="manage" style="justify-self:start">Edit activities</button>
+    <div class="manage" id="manage" hidden>
+      <ul class="manage-list" id="manage-list"></ul>
+      <form class="add-form" id="add-form" autocomplete="off">
+        <label for="new-name">Add an activity</label>
+        <div class="field-row">
+          <input id="new-name" maxlength="40" placeholder="e.g. Magnesium, Stretch, Read 20 pages">
+          <select id="new-group" aria-label="Group">
+            <option>Supplements</option>
+            <option>Movement</option>
+            <option>Nutrition</option>
+          </select>
+        </div>
+        <div class="swatches" id="swatches" role="radiogroup" aria-label="Color"></div>
+        <button class="primary" type="submit" id="add-btn" disabled>Add activity</button>
+      </form>
+    </div>
+  </section>
+
+  </main>
+
+  <main class="view" id="view-progress" hidden>
+  <section class="grid-panel panel" aria-labelledby="grid-title">
+    <div class="grid-head">
+      <h2 id="grid-title">Check-ins in the last year</h2>
+      <div class="pills" id="ranges" role="tablist" aria-label="Time range"></div>
+    </div>
+    <div class="pills" id="filters" role="tablist" aria-label="Show activity"></div>
+    <div class="heat-scroll" id="heat-scroll">
+      <div class="heat" id="heat" role="img" aria-label="Activity calendar"></div>
+    </div>
+    <div class="heat-foot">
+      <span>Tap a day to open it on Today.</span>
+      <span class="legend" id="legend"></span>
+    </div>
+  </section>
+
+  <section class="sum panel" aria-labelledby="sum-title">
+    <div class="sum-head">
+      <h2 id="sum-title">Recap</h2>
+      <div class="seg" role="tablist" aria-label="Recap period">
+        <button role="tab" data-period="week" aria-selected="true">Week</button>
+        <button role="tab" data-period="month" aria-selected="false">Month</button>
+        <button role="tab" data-period="year" aria-selected="false">Year</button>
+      </div>
+    </div>
+    <div class="period-nav">
+      <button class="icon-btn" id="prev-period" aria-label="Previous period"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3 5 8l5 5"/></svg></button>
+      <span class="lbl" id="period-label">—</span>
+      <button class="icon-btn" id="next-period" aria-label="Next period"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 3 5 5-5 5"/></svg></button>
+    </div>
+    <dl class="stats">
+      <div><dt>Check-ins</dt><dd id="st-total">0</dd></div>
+      <div><dt>Full days</dt><dd id="st-perfect">0</dd></div>
+      <div><dt>Consistency</dt><dd id="st-pct">0<small>%</small></dd></div>
+    </dl>
+    <ul class="rows" id="rows"></ul>
+  </section>
+
+  </main>
+
+  <p class="foot" id="foot">Your log is private to you.</p>
+</div>
+
+<script>
+(() => {
+  const DEFAULT_ACTIVITIES = [
+    { id: "creatine", name: "Creatine", color: "#ec4899", group: "Supplements" },
+    { id: "protein-shake", name: "Protein shake", color: "#fb7185", group: "Supplements" },
+    { id: "ashwagandha", name: "Ashwagandha", color: "#c026d3", group: "Supplements" },
+    { id: "gym", name: "Gym", color: "#16a34a", group: "Movement" },
+    { id: "dog-walk", name: "Walk the dog", color: "#0d9488", group: "Movement" },
+    { id: "water", name: "Drink 2 L water", color: "#0ea5e9", group: "Nutrition" },
+    { id: "protein-200", name: "Eat ~200 g protein", color: "#2563eb", group: "Nutrition" },
+  ];
+  const GROUPS = ["Supplements", "Movement", "Nutrition"];
+  const PALETTE = ["#ec4899", "#fb7185", "#c026d3", "#16a34a", "#0d9488", "#65a30d", "#0ea5e9", "#2563eb", "#4f46e5"];
+  const LS_KEY = "aleksej-kalendar-v1";
+  const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const CHECK = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m3.5 8.5 3 3 6-7"/></svg>';
+
+  // ---------- dates ----------
+  const pad = (n) => String(n).padStart(2, "0");
+  const keyOf = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const fromKey = (k) => { const [y, m, d] = k.split("-").map(Number); return new Date(y, m - 1, d); };
+  const today = () => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), d.getDate()); };
+  const addDays = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
+  const monIdx = (d) => (d.getDay() + 6) % 7;
+  const diffDays = (a, b) => Math.round((b - a) / 864e5);
+  const fmtLong = (d) => d.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" });
+  const fmtTip = (d) => d.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+
+  // ---------- state ----------
+  const cached = (() => { try { return JSON.parse(localStorage.getItem(LS_KEY)) || null; } catch { return null; } })();
+  const state = {
+    activities: (cached && Array.isArray(cached.activities) ? cached.activities : DEFAULT_ACTIVITIES).map((a) => ({ ...a })),
+    years: (cached && cached.years) || {},
+    selected: keyOf(today()),
+    filter: "all",
+    range: "past",
+    period: "week",
+    anchor: keyOf(today()),
+    newColor: PALETTE[0],
+    confirmRemove: null,
+  };
+  const store = { mode: window.claude && typeof window.claude.use === "function" ? "pending" : "local", col: null };
+  const pending = new Map();
+  let settingsPending = false;
+
+  const active = () => state.activities.filter((a) => !a.archived);
+  const getDone = (k) => ((state.years[k.slice(0, 4)] || {})[k]) || [];
+  const doneActive = (k) => { const ids = new Set(active().map((a) => a.id)); return getDone(k).filter((id) => ids.has(id)); };
+  const setDone = (k, arr) => { const y = k.slice(0, 4); (state.years[y] = state.years[y] || {})[k] = arr; };
+
+  function lsWrite() {
+    try { localStorage.setItem(LS_KEY, JSON.stringify({ activities: state.activities, years: state.years })); } catch {}
+  }
+
+  // ---------- sync ----------
+  const syncEl = document.getElementById("sync");
+  const syncText = document.getElementById("sync-text");
+  function setSync(s) {
+    syncEl.dataset.state = s;
+    syncText.textContent = {
+      local: "Saved on this device",
+      connecting: "Connecting…",
+      synced: "Synced to your account",
+      error: "Not saved yet. Retrying…",
+    }[s];
+    document.getElementById("foot").textContent = s === "local"
+      ? "Saved in this browser only. Open the published link while signed in to sync across devices."
+      : "Your log is private to you and syncs to any device where you open this link.";
+  }
+
+  const queues = {};
+  function enqueue(key, fn) {
+    const p = (queues[key] || Promise.resolve()).then(fn, fn);
+    queues[key] = p.catch(() => {});
+    return p;
+  }
+  let retries = 0;
+  function onWriteError() {
+    setSync("error");
+    if (retries < 4) { retries++; setTimeout(flushPending, 2000 * retries); }
+  }
+  function writeDay(k) {
+    const docId = "y" + k.slice(0, 4);
+    enqueue(docId, async () => {
+      if (!pending.has(k)) return;
+      const val = pending.get(k);
+      const ref = store.col.doc(docId);
+      const snap = await ref.get();
+      if (snap.exists) await ref.update({ days: { [k]: val } });
+      else await ref.set({ days: { [k]: val } });
+      if (pending.get(k) === val) pending.delete(k);
+      retries = 0;
+    }).catch(onWriteError);
+  }
+  function writeSettings() {
+    settingsPending = true;
+    enqueue("settings", async () => {
+      await store.col.doc("settings").set({ activities: state.activities });
+      settingsPending = false;
+      retries = 0;
+    }).catch(onWriteError);
+  }
+  function flushPending() {
+    if (!store.col) return;
+    for (const k of pending.keys()) writeDay(k);
+    if (settingsPending) writeSettings();
+  }
+  function persistDay(k) {
+    lsWrite();
+    if (store.mode === "local") return;
+    pending.set(k, getDone(k).slice());
+    if (store.col) writeDay(k);
+  }
+  function persistSettings() {
+    lsWrite();
+    if (store.mode === "local") return;
+    settingsPending = true;
+    if (store.col) writeSettings();
+  }
+
+  function onSnap(snap) {
+    if (snap.metadata.fromCache && snap.empty) return;
+    const years = {};
+    let acts = null;
+    snap.docs.forEach((doc) => {
+      const d = doc.data() || {};
+      if (doc.id === "settings" && Array.isArray(d.activities)) acts = d.activities;
+      else if (/^y\d{4}$/.test(doc.id)) years[doc.id.slice(1)] = { ...(d.days || {}) };
+    });
+    for (const [k, v] of pending) (years[k.slice(0, 4)] = years[k.slice(0, 4)] || {})[k] = v;
+    state.years = years;
+    if (!settingsPending) state.activities = (acts || DEFAULT_ACTIVITIES).map((a) => ({ ...a }));
+    if (syncEl.dataset.state !== "error" || pending.size === 0) setSync(snap.metadata.fromCache ? "connecting" : "synced");
+    lsWrite();
+    renderAll();
+  }
+
+  async function connect() {
+    if (store.mode === "local") { setSync("local"); return; }
+    setSync("connecting");
+    try {
+      const [db, user] = await Promise.all([window.claude.use("db"), window.claude.use("user")]);
+      const uid = user ? await user.id() : null;
+      if (!db || !uid) { store.mode = "local"; pending.clear(); settingsPending = false; setSync("local"); return; }
+      store.mode = "db";
+      store.col = db.collection("data/users/" + uid);
+      flushPending();
+      store.col.onSnapshot(onSnap, () => setSync("error"));
+    } catch {
+      store.mode = "local";
+      setSync("local");
+    }
+  }
+
+  // ---------- day logger ----------
+  const $ = (id) => document.getElementById(id);
+  function renderLogger() {
+    const t = today();
+    const sel = fromKey(state.selected);
+    const delta = diffDays(t, sel);
+    $("day-title").textContent = fmtLong(sel);
+    $("day-rel").textContent = delta === 0 ? "Today" : delta === -1 ? "Yesterday" : delta < 0 ? `${-delta} days ago` : "Upcoming";
+    $("next-day").disabled = delta >= 0;
+    $("today-btn").hidden = delta === 0;
+
+    const acts = active();
+    const done = new Set(getDone(state.selected));
+    const n = acts.filter((a) => done.has(a.id)).length;
+    $("prog-text").innerHTML = acts.length ? `<strong>${n}</strong> of ${acts.length} locked in` : "No activities yet";
+    $("segbar").innerHTML = acts.map((a) => `<span style="${done.has(a.id) ? `background:${a.color}` : ""}"></span>`).join("");
+
+    const isFuture = delta > 0;
+    const groups = [...GROUPS, ...new Set(acts.map((a) => a.group).filter((g) => !GROUPS.includes(g)))];
+    $("groups").innerHTML = groups.map((g) => {
+      const list = acts.filter((a) => (a.group || "Supplements") === g);
+      if (!list.length) return "";
+      return `<div class="group"><p class="eyebrow">${esc(g)}</p><div class="acts">${list.map((a) => `
+        <button class="act" style="--c:${a.color}" data-id="${esc(a.id)}" aria-pressed="${done.has(a.id)}" ${isFuture ? "disabled" : ""}>
+          <span class="tick">${CHECK}</span><span class="name">${esc(a.name)}</span>
+        </button>`).join("")}</div></div>`;
+    }).join("") + (isFuture ? `<p class="future-note">You can only lock in days that have started.</p>` : "");
+  }
+
+  $("groups").addEventListener("click", (e) => {
+    const btn = e.target.closest(".act");
+    if (!btn || btn.disabled) return;
+    const id = btn.dataset.id;
+    const k = state.selected;
+    const cur = getDone(k);
+    setDone(k, cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]);
+    persistDay(k);
+    renderAll();
+  });
+
+  function selectDay(k) {
+    if (fromKey(k) > today()) return;
+    state.selected = k;
+    renderAll();
+  }
+  $("prev-day").addEventListener("click", () => selectDay(keyOf(addDays(fromKey(state.selected), -1))));
+  $("next-day").addEventListener("click", () => selectDay(keyOf(addDays(fromKey(state.selected), 1))));
+  $("today-btn").addEventListener("click", () => selectDay(keyOf(today())));
+  document.addEventListener("keydown", (e) => {
+    if (e.target.closest("input, select, textarea")) return;
+    if (e.key === "ArrowLeft") $("prev-day").click();
+    if (e.key === "ArrowRight" && !$("next-day").disabled) $("next-day").click();
+  });
+
+  // ---------- manage activities ----------
+  $("manage-toggle").addEventListener("click", () => {
+    const m = $("manage");
+    m.hidden = !m.hidden;
+    $("manage-toggle").setAttribute("aria-expanded", String(!m.hidden));
+    $("manage-toggle").textContent = m.hidden ? "Edit activities" : "Done editing";
+    state.confirmRemove = null;
+    renderManage();
+  });
+  function renderManage() {
+    if ($("manage").hidden) return;
+    $("manage-list").innerHTML = active().map((a) => `
+      <li style="--c:${a.color}"><span class="dot"></span><span class="nm">${esc(a.name)}</span>
+      ${state.confirmRemove === a.id
+        ? `<button class="mini-btn danger" data-remove="${esc(a.id)}">Remove</button><button class="mini-btn" data-keep>Keep</button>`
+        : `<button class="mini-btn" data-ask="${esc(a.id)}">Remove</button>`}</li>`).join("");
+    $("swatches").innerHTML = PALETTE.map((c) => `<button type="button" class="swatch" role="radio" style="--c:${c}" data-color="${c}" aria-checked="${c === state.newColor}" aria-label="Color ${c}"></button>`).join("");
+  }
+  $("manage-list").addEventListener("click", (e) => {
+    const b = e.target.closest("button");
+    if (!b) return;
+    if (b.dataset.ask) state.confirmRemove = b.dataset.ask;
+    else if (b.dataset.remove) {
+      const a = state.activities.find((x) => x.id === b.dataset.remove);
+      if (a) a.archived = true;
+      if (state.filter === b.dataset.remove) state.filter = "all";
+      state.confirmRemove = null;
+      persistSettings();
+      renderAll();
+      return;
+    } else state.confirmRemove = null;
+    renderManage();
+  });
+  $("swatches").addEventListener("click", (e) => {
+    const s = e.target.closest(".swatch");
+    if (!s) return;
+    state.newColor = s.dataset.color;
+    renderManage();
+  });
+  $("new-name").addEventListener("input", () => { $("add-btn").disabled = !$("new-name").value.trim(); });
+  $("add-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const name = $("new-name").value.trim();
+    if (!name) return;
+    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 24) || "activity";
+    state.activities.push({ id: `${slug}-${Math.random().toString(36).slice(2, 6)}`, name, color: state.newColor, group: $("new-group").value });
+    $("new-name").value = "";
+    $("add-btn").disabled = true;
+    persistSettings();
+    renderAll();
+  });
+
+  // ---------- year grid ----------
+  function rangeBounds() {
+    const t = today();
+    if (state.range === "past") return { start: addDays(t, -364), end: t };
+    const y = Number(state.range);
+    return { start: new Date(y, 0, 1), end: new Date(y, 11, 31) };
+  }
+  function level(k, nActive) {
+    const n = doneActive(k).length;
+    if (!n || !nActive) return 0;
+    const r = n / nActive;
+    return r <= 0.25 ? 1 : r <= 0.5 ? 2 : r <= 0.8 ? 3 : 4;
+  }
+
+  function renderRanges() {
+    const cy = today().getFullYear();
+    const years = new Set([cy, cy - 1]);
+    Object.keys(state.years).forEach((y) => { if (Object.values(state.years[y]).some((v) => v.length)) years.add(Number(y)); });
+    const opts = [["past", "Past year"], ...[...years].filter((y) => y <= cy).sort((a, b) => b - a).map((y) => [String(y), String(y)])];
+    $("ranges").innerHTML = opts.map(([v, l]) => `<button class="pill range-pill" role="tab" data-range="${v}" aria-selected="${state.range === v}">${l}</button>`).join("");
+  }
+  $("ranges").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-range]");
+    if (!b) return;
+    state.range = b.dataset.range;
+    renderGrid(true);
+    renderRanges();
+  });
+
+  function renderFilters() {
+    const acts = active();
+    if (state.filter !== "all" && !acts.some((a) => a.id === state.filter)) state.filter = "all";
+    $("filters").innerHTML = `<button class="pill" role="tab" data-filter="all" aria-selected="${state.filter === "all"}"><span class="dot"></span>All</button>` +
+      acts.map((a) => `<button class="pill" role="tab" data-filter="${esc(a.id)}" style="--c:${a.color}" aria-selected="${state.filter === a.id}"><span class="dot"></span>${esc(a.name)}</button>`).join("");
+  }
+  $("filters").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-filter]");
+    if (!b) return;
+    state.filter = b.dataset.filter;
+    renderFilters();
+    renderGrid(false);
+  });
+
+  function renderGrid(scrollToEnd) {
+    const t = today();
+    const { start, end } = rangeBounds();
+    const gridStart = addDays(start, -monIdx(start));
+    const gridEnd = addDays(end, 6 - monIdx(end));
+    const cols = (diffDays(gridStart, gridEnd) + 1) / 7;
+    const acts = active();
+    const nActive = acts.length;
+    const actMap = Object.fromEntries(state.activities.map((a) => [a.id, a]));
+    const filt = state.filter === "all" ? null : actMap[state.filter];
+
+    const parts = [];
+    // month labels
+    const labels = [];
+    for (let c = 0; c < cols; c++) {
+      for (let r = 0; r < 7; r++) {
+        const d = addDays(gridStart, c * 7 + r);
+        if (d < start || d > end) continue;
+        if (d.getDate() === 1 || (c === 0 && r === monIdx(start))) { labels.push({ c, m: d.getMonth() }); break; }
+      }
+    }
+    labels.forEach((l, i) => {
+      const next = labels[i + 1];
+      if (next && next.c - l.c < 3) return;
+      parts.push(`<span class="mlabel" style="grid-column:${l.c + 2} / span 4">${MONTHS[l.m]}</span>`);
+    });
+    // weekday labels (Monday-first rows)
+    [["Mon", 0], ["Wed", 2], ["Fri", 4]].forEach(([l, r]) => parts.push(`<span class="dlabel" style="grid-row:${r + 2}">${l}</span>`));
+
+    let total = 0;
+    for (let c = 0; c < cols; c++) {
+      for (let r = 0; r < 7; r++) {
+        const d = addDays(gridStart, c * 7 + r);
+        const k = keyOf(d);
+        const pos = `grid-column:${c + 2};grid-row:${r + 2}`;
+        if (d < start || d > end) { parts.push(`<i class="c out" style="${pos}"></i>`); continue; }
+        if (d > t) { parts.push(`<i class="c future" style="${pos}"></i>`); continue; }
+        const done = doneActive(k);
+        let cls = "c", bg = "";
+        if (filt) {
+          if (done.includes(filt.id)) { bg = `background:${filt.color}`; total++; }
+        } else {
+          total += done.length;
+          const lv = level(k, nActive);
+          if (lv) cls += " l" + lv;
+        }
+        if (k === state.selected) cls += " sel";
+        const names = done.map((id) => actMap[id]?.name).filter(Boolean);
+        const tip = `${fmtTip(d)}: ${names.length ? names.join(", ") : "nothing logged"}`;
+        parts.push(`<i class="${cls}" style="${pos};${bg}" data-k="${k}" title="${esc(tip)}"></i>`);
+      }
+    }
+    const heat = $("heat");
+    heat.style.setProperty("--cols", cols);
+    heat.innerHTML = parts.join("");
+
+    const when = state.range === "past" ? "in the last year" : `in ${state.range}`;
+    $("grid-title").textContent = filt
+      ? `${filt.name}: ${total} ${total === 1 ? "day" : "days"} ${when}`
+      : `${total.toLocaleString()} ${total === 1 ? "check-in" : "check-ins"} ${when}`;
+    $("legend").innerHTML = filt
+      ? `<span>Missed</span><i></i><i style="background:${filt.color}"></i><span>Done</span>`
+      : `<span>Less</span><i></i><i class="l1"></i><i class="l2"></i><i class="l3"></i><i class="l4"></i><span>More</span>`;
+
+    if (scrollToEnd) {
+      const sc = $("heat-scroll");
+      requestAnimationFrame(() => { sc.scrollLeft = state.range === "past" || Number(state.range) === t.getFullYear() ? sc.scrollWidth : 0; });
+    }
+  }
+  $("heat").addEventListener("click", (e) => {
+    const c = e.target.closest(".c[data-k]");
+    if (!c) return;
+    selectDay(c.dataset.k);
+    showView("today");
+  });
+
+  // ---------- recap ----------
+  function periodBounds() {
+    const a = fromKey(state.anchor);
+    if (state.period === "week") { const s = addDays(a, -monIdx(a)); return { start: s, end: addDays(s, 6) }; }
+    if (state.period === "month") return { start: new Date(a.getFullYear(), a.getMonth(), 1), end: new Date(a.getFullYear(), a.getMonth() + 1, 0) };
+    return { start: new Date(a.getFullYear(), 0, 1), end: new Date(a.getFullYear(), 11, 31) };
+  }
+  function periodLabel(s, e) {
+    if (state.period === "year") return String(s.getFullYear());
+    if (state.period === "month") return s.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+    const sameMonth = s.getMonth() === e.getMonth();
+    const left = sameMonth ? s.getDate() : `${s.getDate()} ${MONTHS[s.getMonth()]}`;
+    return `${left} – ${e.getDate()} ${MONTHS[e.getMonth()]} ${e.getFullYear()}`;
+  }
+  function streak(id) {
+    let d = today();
+    if (!getDone(keyOf(d)).includes(id)) d = addDays(d, -1);
+    let n = 0;
+    while (getDone(keyOf(d)).includes(id)) { n++; d = addDays(d, -1); }
+    return n;
+  }
+
+  function renderRecap() {
+    const t = today();
+    const { start, end } = periodBounds();
+    $("period-label").textContent = periodLabel(start, end);
+    $("next-period").disabled = end >= t;
+    document.querySelectorAll(".seg button").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.period === state.period)));
+
+    const days = [];
+    for (let d = start; d <= end; d = addDays(d, 1)) days.push(d);
+    const elapsed = days.filter((d) => d <= t);
+    const acts = active();
+
+    let total = 0, perfect = 0;
+    elapsed.forEach((d) => {
+      const n = doneActive(keyOf(d)).length;
+      total += n;
+      if (acts.length && n === acts.length) perfect++;
+    });
+    const possible = elapsed.length * acts.length;
+    $("st-total").textContent = total.toLocaleString();
+    $("st-perfect").innerHTML = `${perfect}<small> / ${elapsed.length}</small>`;
+    $("st-pct").innerHTML = `${possible ? Math.round((total / possible) * 100) : 0}<small>%</small>`;
+
+    if (!acts.length) { $("rows").innerHTML = `<li class="empty-note">Add an activity to start your recap.</li>`; return; }
+    if (!elapsed.length) { $("rows").innerHTML = `<li class="empty-note">This period hasn't started yet.</li>`; return; }
+
+    $("rows").innerHTML = acts.map((a) => {
+      const count = elapsed.filter((d) => getDone(keyOf(d)).includes(a.id)).length;
+      const s = streak(a.id);
+      let viz;
+      if (state.period === "year") {
+        viz = `<div class="bar"><span style="width:${(count / elapsed.length) * 100}%"></span></div>`;
+      } else {
+        viz = `<div class="strip ${state.period}" style="--n:${days.length}">${days.map((d) => {
+          const k = keyOf(d);
+          const cls = d > t ? "future" : getDone(k).includes(a.id) ? "on" : "";
+          return `<i class="${cls}" title="${esc(fmtTip(d))}"></i>`;
+        }).join("")}</div>`;
+      }
+      const sub = s > 1 ? `${s}-day streak` : `${Math.round((count / elapsed.length) * 100)}%`;
+      return `<li class="row" style="--c:${a.color}">
+        <span class="nm"><i></i><span>${esc(a.name)}</span></span>
+        <div class="viz">${viz}</div>
+        <span class="ct">${count} / ${elapsed.length}<small>${sub}</small></span>
+      </li>`;
+    }).join("");
+  }
+  document.querySelector(".seg").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-period]");
+    if (!b) return;
+    state.period = b.dataset.period;
+    state.anchor = keyOf(today());
+    renderRecap();
+  });
+  function shiftPeriod(dir) {
+    const a = fromKey(state.anchor);
+    const next = state.period === "week" ? addDays(a, 7 * dir)
+      : state.period === "month" ? new Date(a.getFullYear(), a.getMonth() + dir, 1)
+      : new Date(a.getFullYear() + dir, 0, 1);
+    state.anchor = keyOf(next);
+    renderRecap();
+  }
+  $("prev-period").addEventListener("click", () => shiftPeriod(-1));
+  $("next-period").addEventListener("click", () => shiftPeriod(1));
+
+  // ---------- util ----------
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+  let lastDay = keyOf(today());
+  function renderAll(scroll) {
+    renderLogger();
+    renderManage();
+    renderRanges();
+    renderFilters();
+    renderGrid(scroll);
+    renderRecap();
+  }
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState !== "visible") return;
+    const now = keyOf(today());
+    if (now !== lastDay) {
+      if (state.selected === lastDay) state.selected = now;
+      lastDay = now;
+      renderAll(true);
+    }
+  });
+
+  let currentView = "today";
+  function showView(v) {
+    currentView = v === "progress" ? "progress" : "today";
+    $("view-today").hidden = currentView !== "today";
+    $("view-progress").hidden = currentView !== "progress";
+    $("tab-today").toggleAttribute("aria-current", currentView === "today");
+    $("tab-progress").toggleAttribute("aria-current", currentView === "progress");
+    if (currentView === "today") $("tab-today").setAttribute("aria-current", "page");
+    else $("tab-progress").setAttribute("aria-current", "page");
+    $("tagline").textContent = currentView === "today"
+      ? "Tap what you did today and it locks into your year."
+      : "Check in on your streaks every once in a while.";
+    if (currentView === "progress") renderGrid(true);
+    window.scrollTo(0, 0);
+  }
+  document.querySelector(".tabs").addEventListener("click", (e) => {
+    const a = e.target.closest("a");
+    if (!a) return;
+    e.preventDefault();
+    showView(a.id === "tab-progress" ? "progress" : "today");
+    try { history.replaceState(null, "", a.getAttribute("href")); } catch {}
+  });
+  window.addEventListener("hashchange", () => showView(location.hash.slice(1)));
+  if (location.hash === "#progress") showView("progress");
+
+  setSync(store.mode === "local" ? "local" : "connecting");
+  renderAll(true);
+  connect();
+})();
+</script>
