@@ -86,10 +86,21 @@ p { margin: 0; }
 .day-nav { display: flex; align-items: center; gap: 10px; }
 .day-label { flex: 1; min-width: 0; text-align: center; }
 .day-label h2 { font-size: clamp(22px, 5vw, 28px); font-weight: 700; line-height: 1.15; }
-.progress { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 14px; }
-.progress strong { font-weight: 700; }
-.segbar { display: flex; gap: 3px; height: 8px; }
-.segbar span { flex: 1; border-radius: 3px; background: var(--empty); transition: background-color 0.2s; }
+.ring-wrap { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 12px 28px; padding-block: 6px; }
+.ring { width: min(220px, 64vw); height: auto; flex: none; overflow: visible; }
+.ring .slice { fill: color-mix(in srgb, var(--c) 22%, #fff); stroke: var(--bg); stroke-width: 3; cursor: pointer; transition: fill 0.25s; outline: none; }
+.ring .slice.on { fill: var(--c); }
+.ring .slice:hover { fill: color-mix(in srgb, var(--c) 32%, #fff); }
+.ring .slice.on:hover { fill: color-mix(in srgb, var(--c) 85%, #000); }
+.ring .slice:focus-visible { stroke: var(--focus); stroke-width: 3; }
+.ring .slice[aria-disabled="true"] { cursor: not-allowed; }
+.ring .mark { pointer-events: none; }
+.ring .big { font-family: var(--display); font-size: 40px; font-weight: 700; fill: var(--ink); }
+.ring .small { font-family: var(--body); font-size: 12.5px; font-weight: 600; fill: var(--muted); letter-spacing: 0.04em; }
+.ring-side { flex: 1 1 200px; min-width: 0; display: grid; gap: 6px; }
+.ring-head { font-family: var(--display); font-size: 20px; font-weight: 700; line-height: 1.2; }
+.ring-sub { color: var(--muted); font-size: 14px; }
+@media (max-width: 480px) { .ring-side { text-align: center; } .ring-side .link-btn { justify-self: center !important; } }
 .groups { display: grid; gap: 14px; }
 .group { display: grid; gap: 8px; }
 .acts { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
@@ -240,11 +251,14 @@ p { margin: 0; }
       </div>
       <button class="icon-btn" id="next-day" aria-label="Next day"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 3 5 5-5 5"/></svg></button>
     </div>
-    <div class="progress">
-      <span id="prog-text">0 of 7 locked in</span>
-      <button class="link-btn" id="today-btn" hidden>Back to today</button>
+    <div class="ring-wrap">
+      <svg class="ring" id="ring" viewBox="0 0 200 200" role="group" aria-label="Progress for this day"></svg>
+      <div class="ring-side">
+        <p class="ring-head" id="ring-head">Nothing locked in yet</p>
+        <p class="ring-sub" id="ring-sub"></p>
+        <button class="link-btn" id="today-btn" hidden style="justify-self:start">Back to today</button>
+      </div>
     </div>
-    <div class="segbar" id="segbar" aria-hidden="true"></div>
     <div class="groups" id="groups"></div>
     <button class="link-btn" id="manage-toggle" aria-expanded="false" aria-controls="manage" style="justify-self:start">Edit activities</button>
     <div class="manage" id="manage" hidden>
@@ -313,16 +327,22 @@ p { margin: 0; }
 <script>
 (() => {
   const DEFAULT_ACTIVITIES = [
-    { id: "creatine", name: "Creatine", color: "#ec4899", group: "Supplements" },
-    { id: "protein-shake", name: "Protein shake", color: "#fb7185", group: "Supplements" },
-    { id: "ashwagandha", name: "Ashwagandha", color: "#c026d3", group: "Supplements" },
-    { id: "gym", name: "Gym", color: "#16a34a", group: "Movement" },
-    { id: "dog-walk", name: "Walk the dog", color: "#0d9488", group: "Movement" },
+    { id: "creatine", name: "Creatine", color: "#f472b6", group: "Supplements" },
+    { id: "protein-shake", name: "Protein shake", color: "#e11d48", group: "Supplements" },
+    { id: "ashwagandha", name: "Ashwagandha", color: "#a21caf", group: "Supplements" },
+    { id: "gym", name: "Gym", color: "#22c55e", group: "Movement" },
+    { id: "dog-walk", name: "Walk the dog", color: "#047857", group: "Movement" },
     { id: "water", name: "Drink 2 L water", color: "#0ea5e9", group: "Nutrition" },
     { id: "protein-200", name: "Eat ~200 g protein", color: "#2563eb", group: "Nutrition" },
   ];
   const GROUPS = ["Supplements", "Movement", "Nutrition"];
-  const PALETTE = ["#ec4899", "#fb7185", "#c026d3", "#16a34a", "#0d9488", "#65a30d", "#0ea5e9", "#2563eb", "#4f46e5"];
+  const PALETTE = ["#f472b6", "#e11d48", "#a21caf", "#22c55e", "#047857", "#84cc16", "#0ea5e9", "#2563eb", "#4f46e5"];
+  // First-version default colours, swapped for easier-to-tell-apart shades
+  const OLD_COLORS = { creatine: "#ec4899", "protein-shake": "#fb7185", ashwagandha: "#c026d3", gym: "#16a34a", "dog-walk": "#0d9488" };
+  const migrate = (acts) => acts.map((a) => {
+    const def = DEFAULT_ACTIVITIES.find((d) => d.id === a.id);
+    return def && OLD_COLORS[a.id] === a.color ? { ...a, color: def.color } : { ...a };
+  });
   const LS_KEY = "aleksej-kalendar-v1";
   const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   const CHECK = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m3.5 8.5 3 3 6-7"/></svg>';
@@ -341,7 +361,7 @@ p { margin: 0; }
   // ---------- state ----------
   const cached = (() => { try { return JSON.parse(localStorage.getItem(LS_KEY)) || null; } catch { return null; } })();
   const state = {
-    activities: (cached && Array.isArray(cached.activities) ? cached.activities : DEFAULT_ACTIVITIES).map((a) => ({ ...a })),
+    activities: migrate(cached && Array.isArray(cached.activities) ? cached.activities : DEFAULT_ACTIVITIES),
     years: (cached && cached.years) || {},
     selected: keyOf(today()),
     filter: "all",
@@ -441,7 +461,7 @@ p { margin: 0; }
     });
     for (const [k, v] of pending) (years[k.slice(0, 4)] = years[k.slice(0, 4)] || {})[k] = v;
     state.years = years;
-    if (!settingsPending) state.activities = (acts || DEFAULT_ACTIVITIES).map((a) => ({ ...a }));
+    if (!settingsPending) state.activities = migrate(acts || DEFAULT_ACTIVITIES);
     if (syncEl.dataset.state !== "error" || pending.size === 0) setSync(snap.metadata.fromCache ? "connecting" : "synced");
     lsWrite();
     renderAll();
@@ -478,10 +498,20 @@ p { margin: 0; }
     const acts = active();
     const done = new Set(getDone(state.selected));
     const n = acts.filter((a) => done.has(a.id)).length;
-    $("prog-text").innerHTML = acts.length ? `<strong>${n}</strong> of ${acts.length} locked in` : "No activities yet";
-    $("segbar").innerHTML = acts.map((a) => `<span style="${done.has(a.id) ? `background:${a.color}` : ""}"></span>`).join("");
-
     const isFuture = delta > 0;
+    renderRing(acts, done, isFuture);
+    const left = acts.filter((a) => !done.has(a.id));
+    $("ring-head").textContent = !acts.length ? "No activities yet"
+      : isFuture ? "This day hasn't started"
+      : !left.length ? `All ${acts.length} locked in`
+      : n === 0 ? "Nothing locked in yet"
+      : `${left.length} to go`;
+    $("ring-sub").textContent = !acts.length ? "Add one under Edit activities."
+      : isFuture ? "Come back when it does."
+      : !left.length ? "Every slice is filled for this day."
+      : n === 0 ? "Tap a slice or a button below to lock something in."
+      : `Still open: ${left.map((a) => a.name).join(", ")}.`;
+
     const groups = [...GROUPS, ...new Set(acts.map((a) => a.group).filter((g) => !GROUPS.includes(g)))];
     $("groups").innerHTML = groups.map((g) => {
       const list = acts.filter((a) => (a.group || "Supplements") === g);
@@ -493,15 +523,52 @@ p { margin: 0; }
     }).join("") + (isFuture ? `<p class="future-note">You can only lock in days that have started.</p>` : "");
   }
 
-  $("groups").addEventListener("click", (e) => {
-    const btn = e.target.closest(".act");
-    if (!btn || btn.disabled) return;
-    const id = btn.dataset.id;
+  function renderRing(acts, done, isFuture) {
+    const C = 100, R = 96, r = 62;
+    const pt = (rad, a) => `${(C + rad * Math.sin(a)).toFixed(2)} ${(C - rad * Math.cos(a)).toFixed(2)}`;
+    const n = acts.length;
+    const step = (Math.PI * 2) / Math.max(n, 1);
+    const slices = acts.map((a, i) => {
+      const a0 = i * step, a1 = (i + 1) * step - (n === 1 ? 1e-4 : 0);
+      const large = a1 - a0 > Math.PI ? 1 : 0;
+      const d = `M${pt(R, a0)}A${R} ${R} 0 ${large} 1 ${pt(R, a1)}L${pt(r, a1)}A${r} ${r} 0 ${large} 0 ${pt(r, a0)}Z`;
+      const on = done.has(a.id);
+      const mid = (a0 + a1) / 2, mr = (R + r) / 2;
+      const mx = C + mr * Math.sin(mid), my = C - mr * Math.cos(mid);
+      const check = on ? `<path class="mark" d="M${mx - 6} ${my}l4 4 8-9" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>` : "";
+      const label = `${a.name}: ${on ? "done" : "not done"}`;
+      return `<path class="slice${on ? " on" : ""}" style="--c:${a.color}" d="${d}" data-id="${esc(a.id)}" role="button" tabindex="0" aria-pressed="${on}" aria-label="${esc(label)}" ${isFuture ? 'aria-disabled="true"' : ""}><title>${esc(label)}</title></path>${check}`;
+    }).join("");
+    const count = acts.filter((a) => done.has(a.id)).length;
+    const pct = n ? Math.round((count / n) * 100) : 0;
+    $("ring").innerHTML = slices +
+      `<text class="big" x="${C}" y="${C + 6}" text-anchor="middle">${count}/${n}</text>` +
+      `<text class="small" x="${C}" y="${C + 26}" text-anchor="middle">${pct}% DONE</text>`;
+  }
+  function toggleActivity(id) {
+    if (fromKey(state.selected) > today()) return;
     const k = state.selected;
     const cur = getDone(k);
     setDone(k, cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]);
     persistDay(k);
     renderAll();
+  }
+  $("groups").addEventListener("click", (e) => {
+    const btn = e.target.closest(".act");
+    if (!btn || btn.disabled) return;
+    toggleActivity(btn.dataset.id);
+  });
+  $("ring").addEventListener("click", (e) => {
+    const sl = e.target.closest(".slice");
+    if (sl) toggleActivity(sl.dataset.id);
+  });
+  $("ring").addEventListener("keydown", (e) => {
+    const sl = e.target.closest(".slice");
+    if (!sl || (e.key !== "Enter" && e.key !== " ")) return;
+    e.preventDefault();
+    const id = sl.dataset.id;
+    toggleActivity(id);
+    $("ring").querySelector(`.slice[data-id="${CSS.escape(id)}"]`)?.focus();
   });
 
   function selectDay(k) {
